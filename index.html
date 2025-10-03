@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Smart Study Buddy — Fixed Logic + Modes</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    /* UI styling (modern card layout) */
+    :root{
+      --bg: linear-gradient(135deg,#dfe9f3,#ffffff);
+      --card:#fff; --muted:#6b7280; --accent:#4caf50;
+    }
+    body{margin:0;font-family:Inter,Segoe UI, system-ui, Arial;background:var(--bg);color:#111}
+    .container{max-width:980px;margin:20px auto;padding:18px}
+    h1{text-align:center;color:#1f2937;margin:8px 0}
+    .card{background:var(--card);border-radius:12px;padding:16px;margin:14px 0;box-shadow:0 6px 24px rgba(15,23,42,0.06)}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    label{font-weight:600;color:#111}
+    select,input,button{padding:10px;border-radius:8px;border:1px solid #d1d5db;font-size:14px}
+    button{background:var(--accent);color:#fff;border:none;cursor:pointer}
+    button.ghost{background:transparent;color:#374151;border:1px solid #e5e7eb}
+    .timer{font-size:3rem;text-align:center;color:#ef4444;margin:10px 0}
+    .controls{text-align:center;margin-top:10px}
+    .controls button{margin:6px;min-width:110px}
+    video{width:100%;border-radius:10px;border:1px solid #e6eef9;display:block}
+    #log{max-height:180px;overflow:auto;background:#fafafa;padding:10px;border-radius:8px;border:1px solid #eef2ff}
+    .subjects input{display:block;width:100%;margin-bottom:8px}
+    .small{font-size:13px;color:var(--muted)}
+    .analysis p{white-space:pre-line}
+    @media (max-width:720px){ .row{flex-direction:column} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📚 Smart Study Buddy</h1>
+
+    <!-- Settings -->
+    <div class="card">
+      <div class="row">
+        <div style="flex:1">
+          <label>Mode</label><br>
+          <select id="modeSelect">
+            <option value="pomodoro">Pomodoro Study (25 / 5)</option>
+            <option value="custom">Custom Study</option>
+            <option value="pseudo">Pseudo Study (simulate distractions)</option>
+          </select>
+        </div>
+
+        <div style="width:220px">
+          <label>Environment</label><br>
+          <select id="environment">
+            <option value="silent">Silent</option>
+            <option value="moderate" selected>Moderate</option>
+            <option value="noisy">Noisy</option>
+          </select>
+        </div>
+
+        <div style="width:260px">
+          <label>Parent Email (optional)</label><br>
+          <input id="parentEmail" type="email" placeholder="parent@example.com" style="width:100%">
+        </div>
+      </div>
+
+      <!-- Custom durations (hidden unless custom mode) -->
+      <div id="customArea" style="margin-top:12px;display:none">
+        <div class="row">
+          <div>
+            <label>Work (minutes)</label><br>
+            <input id="customWork" type="number" min="1" value="30" style="width:120px">
+          </div>
+          <div>
+            <label>Break (minutes)</label><br>
+            <input id="customBreak" type="number" min="1" value="10" style="width:120px">
+          </div>
+          <div style="align-self:flex-end">
+            <span class="small">Custom mode uses these durations.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subjects -->
+    <div class="card">
+      <div class="row" style="align-items:flex-start">
+        <div style="flex:1">
+          <label>Subjects (add any number)</label>
+          <div id="subjectList" class="subjects" style="margin-top:8px">
+            <input type="text" placeholder="Subject 1">
+          </div>
+          <div style="margin-top:8px">
+            <button class="ghost" onclick="addSubject()">➕ Add subject</button>
+          </div>
+        </div>
+
+        <div style="width:360px">
+          <label>Session Info</label>
+          <div style="padding:12px;background:#fbfdff;border-radius:8px;border:1px solid #eef6ff;margin-top:8px">
+            <div class="small">Work duration: <span id="workInfo">25</span> min</div>
+            <div class="small">Break duration: <span id="breakInfo">5</span> min</div>
+            <div class="small" style="margin-top:8px">Mode: <strong id="modeInfo">Pomodoro</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timer and controls -->
+    <div class="card">
+      <div id="timerDisplay" class="timer">25:00</div>
+      <div class="controls">
+        <button id="startBtn">▶ Start</button>
+        <button id="pauseBtn" class="ghost">⏸ Pause</button>
+        <button id="resumeBtn" class="ghost">⏯ Resume</button>
+        <button id="skipBtn" class="ghost">⏭ Skip</button>
+      </div>
+      <div style="text-align:center;margin-top:8px" class="small">
+        <span id="stateInfo">Status: idle</span> • <span id="subjectInfo">Subject: -</span>
+      </div>
+    </div>
+
+    <!-- Camera -->
+    <div class="card">
+      <label>Camera preview</label>
+      <video id="cameraView" autoplay muted playsinline></video>
+      <div class="small" style="margin-top:8px">Camera & mic are used to detect noise and visual motion (privacy: runs locally in your browser).</div>
+    </div>
+
+    <!-- Log & analysis -->
+    <div class="card">
+      <div style="display:flex;gap:16px">
+        <div style="flex:1">
+          <h3>Activity Log</h3>
+          <div id="log"></div>
+        </div>
+        <div style="width:360px">
+          <h3>Analysis & Feedback</h3>
+          <div class="analysis">
+            <p id="analysisText">No session completed yet.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EmailJS SDK (replace with your keys) -->
+  <script src="https://cdn.emailjs.com/sdk/3.2/email.min.js"></script>
+  <script>emailjs.init("YOUR_PUBLIC_KEY");</script>
+
+  <script>
+  /************************************************************************
+   * Robust session engine + modes + all features integrated
+   ************************************************************************/
+
+  // ----- State & defaults -----
+  let state = "idle"; // idle | work | break | paused
+  let pausedState = null; // which state we paused from
+  let mode = "pomodoro"; // pomodoro | custom | pseudo
+  let workDurationSec = 25 * 60;
+  let breakDurationSec = 5 * 60;
+  let remaining = workDurationSec;
+  let timerId = null;
+
+  // Stats
+  let distractions = 0;
+  let totalStudySeconds = 0;
+  let sessionsCompleted = 0;
+
+  // Subjects
+  let subjects = [];
+  let subjectDurations = [];
+  let currentSubjectIndex = 0;
+
+  // Environment thresholds (adjusted by dropdown)
+  let micThreshold = 20;
+  let moveThreshold = 20;
+
+  // Pseudo mode simulator
+  let pseudoIntervalId = null;
+
+  // UI references
+  const modeSelect = document.getElementById("modeSelect");
+  const environmentSelect = document.getElementById("environment");
+  const customArea = document.getElementById("customArea");
+  const customWorkEl = document.getElementById("customWork");
+  const customBreakEl = document.getElementById("customBreak");
+  const timerDisplay = document.getElementById("timerDisplay");
+  const stateInfo = document.getElementById("stateInfo");
+  const subjectInfo = document.getElementById("subjectInfo");
+  const logDiv = document.getElementById("log");
+  const analysisText = document.getElementById("analysisText");
+  const workInfo = document.getElementById("workInfo");
+  const breakInfo = document.getElementById("breakInfo");
+  const modeInfo = document.getElementById("modeInfo");
+
+  // setup initial UI texts
+  updateSessionInfoUI();
+
+  // ----- Mode & environment handlers -----
+  modeSelect.addEventListener("change", () => {
+    mode = modeSelect.value;
+    customArea.style.display = (mode === "custom") ? "block" : "none";
+    if(mode === "pomodoro"){
+      workDurationSec = 25*60; breakDurationSec = 5*60;
+    } else if(mode === "custom"){
+      // will read values on start
+      workDurationSec = (parseInt(customWorkEl.value) || 25) * 60;
+      breakDurationSec = (parseInt(customBreakEl.value) || 5) * 60;
+    } else if(mode === "pseudo"){
+      // keep Pomodoro lengths by default (but simulate distractions)
+      workDurationSec = 25*60; breakDurationSec = 5*60;
+    }
+    updateSessionInfoUI();
+    log(`Mode set to ${mode}`);
+  });
+
+  environmentSelect.addEventListener("change", () => {
+    const env = environmentSelect.value;
+    if(env === "silent"){ micThreshold = 10; moveThreshold = 12; }
+    else if(env === "moderate"){ micThreshold = 20; moveThreshold = 20; }
+    else { micThreshold = 35; moveThreshold = 30; }
+    log(`Environment set to ${env} (micThresh=${micThreshold}, moveThresh=${moveThreshold})`);
+  });
+
+  function updateSessionInfoUI(){
+    workInfo.textContent = Math.round(workDurationSec / 60);
+    breakInfo.textContent = Math.round(breakDurationSec / 60);
+    modeInfo.textContent = mode === 'pomodoro' ? 'Pomodoro' : (mode === 'custom' ? 'Custom' : 'Pseudo Study');
+    showTime();
+  }
+
+  // ----- Subjects dynamic list -----
+  window.addSubject = function(){
+    const list = document.getElementById("subjectList");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Subject " + (list.querySelectorAll("input").length + 1);
+    list.appendChild(input);
+  };
+
+  function collectSubjects(){
+    subjects = [];
+    document.querySelectorAll("#subjectList input").forEach(inp => {
+      const v = inp.value.trim();
+      if(v) subjects.push(v);
+    });
+    if(subjects.length === 0) subjects = ["General Study"];
+    // split durations equally
+    subjectDurations = [];
+    const base = Math.floor(workDurationSec / subjects.length);
+    for(let i=0;i<subjects.length;i++) subjectDurations.push(base);
+    subjectDurations[subjects.length - 1] += workDurationSec - base * subjects.length; // remainder
+    currentSubjectIndex = 0;
+  }
+
+  function announceCurrentSubject(){
+    if(subjects.length > 0 && currentSubjectIndex < subjects.length){
+      subjectInfo.textContent = `Subject: ${subjects[currentSubjectIndex]}`;
+      log(`Now study: ${subjects[currentSubjectIndex]} for ${Math.round(subjectDurations[currentSubjectIndex]/60)} min`);
+    } else {
+      subjectInfo.textContent = `Subject: -`;
+    }
+  }
+
+  function checkSubjectSwitch(){
+    const elapsed = workDurationSec - remaining;
+    let cum = 0;
+    for(let i=0;i<=currentSubjectIndex;i++) cum += subjectDurations[i];
+    if(elapsed >= cum && currentSubjectIndex < subjects.length - 1){
+      currentSubjectIndex++;
+      announceCurrentSubject();
+    }
+  }
+
+  // ----- Timer core (start/pause/resume/skip) -----
+  function showTime(){
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    timerDisplay.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    stateInfo.textContent = `Status: ${state}`;
+  }
+
+  function tick(){
+    if(remaining > 0){
+      remaining--;
+      if(state === 'work') totalStudySeconds++;
+      showTime();
+      if(state === 'work') checkSubjectSwitch();
+    } else {
+      // period finished
+      clearInterval(timerId); timerId = null;
+      if(state === 'work'){
+        sessionsCompleted++;
+        log('Work finished — starting break');
+        giveAnalysis();
+        state = 'break';
+        remaining = breakDurationSec;
+        startTicker();
+      } else if(state === 'break'){
+        log('Break finished — back to work');
+        state = 'work';
+        remaining = workDurationSec;
+        collectSubjects();
+        announceCurrentSubject();
+        startTicker();
+      }
+    }
+  }
+
+  function startTicker(){
+    if(timerId) return;
+    timerId = setInterval(tick, 1000);
+  }
+  function stopTicker(){
+    if(timerId){ clearInterval(timerId); timerId = null; }
+  }
+
+  function startSession(){
+    // If already running and in work, do nothing
+    if(state === 'work' && timerId) { log('Already studying'); return; }
+
+    // If mode is custom, read custom durations
+    if(mode === 'custom'){
+      const cw = parseInt(customWorkEl.value) || 25;
+      const cb = parseInt(customBreakEl.value) || 5;
+      workDurationSec = cw * 60;
+      breakDurationSec = cb * 60;
+    }
+
+    // If resuming from paused state, use resume logic
+    if(state === 'paused' && pausedState){
+      resumeSession();
+      return;
+    }
+
+    // Start a fresh work session
+    collectSubjects();
+    remaining = workDurationSec;
+    state = 'work';
+    announceCurrentSubject();
+    log('Session started (work)');
+    startTicker();
+
+    // Pseudo mode: start simulation of distractions
+    if(mode === 'pseudo') startPseudoSim();
+    updateSessionInfoUI();
+  }
+
+  function pauseSession(){
+    if(state === 'idle') { log('Nothing to pause'); return; }
+    if(state === 'paused'){ log('Already paused'); return; }
+    pausedState = state;
+    state = 'paused';
+    stopTicker();
+    log('Paused');
+    stopPseudoSim();
+  }
+
+  function resumeSession(){
+    if(state !== 'paused') { log('Not paused — cannot resume'); return; }
+    state = pausedState || 'work';
+    pausedState = null;
+    log('Resumed → ' + state);
+    if(state === 'work') announceCurrentSubject();
+    startTicker();
+    if(mode === 'pseudo') startPseudoSim();
+  }
+
+  function skipPeriod(){
+    // Skip current period and immediately start next (work->break or break->work)
+    stopTicker();
+    if(state === 'work'){
+      // go to break
+      sessionsCompleted++;
+      giveAnalysis();
+      state = 'break';
+      remaining = breakDurationSec;
+      log('Skipped work → starting break');
+      startTicker();
+    } else if(state === 'break'){
+      state = 'work';
+      remaining = workDurationSec;
+      collectSubjects(); currentSubjectIndex = 0;
+      log('Skipped break → starting work');
+      announceCurrentSubject();
+      startTicker();
+    } else {
+      log('Skip ignored — not running');
+    }
+    stopPseudoSim();
+    if(mode === 'pseudo' && state === 'work') startPseudoSim();
+  }
+
+  // Wire control buttons
+  document.getElementById('startBtn').addEventListener('click', startSession);
+  document.getElementById('pauseBtn').addEventListener('click', pauseSession);
+  document.getElementById('resumeBtn').addEventListener('click', resumeSession);
+  document.getElementById('skipBtn').addEventListener('click', skipPeriod);
+
+  // ----- Logging + analysis + recommendations -----
+  function log(msg){
+    const time = new Date().toLocaleTimeString();
+    logDiv.innerHTML += `<div>${time} → ${msg}</div>`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  function giveAnalysis(){
+    const minutes = (totalStudySeconds / 60).toFixed(1);
+    let feedback = `You studied ${minutes} minutes in ${sessionsCompleted} session(s). `;
+
+    // Base feedback
+    if(distractions > 5) feedback += "⚠️ High distractions detected. ";
+    else if(distractions > 2) feedback += "Some distractions observed. ";
+    else feedback += "Great focus with minimal distractions. ";
+
+    // Recommendations
+    const recommendations = [];
+    if(distractions > 5) recommendations.push("Try moving to a quieter place or using noise-cancelling headphones.");
+    if(minutes < 20) recommendations.push("Aim for longer focused sessions (at least 25–30 min).");
+    if(minutes > 60) recommendations.push("Take more frequent short breaks to avoid burnout.");
+    if(subjects.length > 4) recommendations.push("Consider splitting study into fewer subjects per session for deeper focus.");
+
+    const recText = recommendations.length ? "📌 Recommendations:\n- " + recommendations.join("\n- ") : "✅ Keep up the good work!";
+    analysisText.textContent = feedback + "\n" + recText;
+
+    // send to parent if provided
+    const parent = document.getElementById('parentEmail').value.trim();
+    if(parent) sendReport(parent, feedback + "\n" + recText, distractions);
+
+    distractions = 0;
+  }
+
+  // ----- Email sending (EmailJS) -----
+  function sendReport(toEmail, message, distractionCount){
+    const params = { to_email: toEmail, message: message + `\nDistractions: ${distractionCount}` };
+    emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", params)
+      .then(() => log(`Report sent to ${toEmail}`))
+      .catch(err => log(`Email send failed: ${JSON.stringify(err)}`));
+  }
+
+  // ----- Distraction handling (noise/movement), plus parent alert immediately -----
+  function handleDistraction(reason){
+    // if already paused, don't double-alert
+    if(state === 'paused') return;
+    distractions++;
+    log(`${reason} (distractions: ${distractions})`);
+    buzz();
+    pauseSession();
+    // immediate parent alert when noise or movement
+    const parent = document.getElementById('parentEmail').value.trim();
+    if(parent && (reason.toLowerCase().includes('noise') || reason.toLowerCase().includes('movement'))){
+      sendReport(parent, `⚠️ Immediate alert: ${reason} during study session.`, distractions);
+    }
+  }
+
+  function buzz(){
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      o.type = 'sine'; o.frequency.value = 440; o.connect(ctx.destination); o.start();
+      setTimeout(()=>{ o.stop(); try{ctx.close()}catch(e){} }, 300);
+    } catch(e) { /* ignore in browsers that restrict audio */ }
+  }
+
+  // ----- Camera + mic monitoring -----
+  const cameraEl = document.getElementById('cameraView');
+  function setupMedia() {
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      log('Camera/Mic not available in this browser.');
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        cameraEl.srcObject = stream;
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 2048;
+          source.connect(analyser);
+          const data = new Uint8Array(analyser.fftSize);
+
+          function micLoop(){
+            analyser.getByteTimeDomainData(data);
+            let sum = 0;
+            for(let i=0;i<data.length;i++) sum += Math.abs(data[i] - 128);
+            const avg = sum / data.length;
+            if(avg > micThreshold && state === 'work' && mode !== 'pseudo'){
+              handleDistraction('Noise detected');
+            }
+            requestAnimationFrame(micLoop);
+          }
+          micLoop();
+        } catch(e){
+          log('Audio analysis not supported: ' + e.message);
+        }
+      })
+      .catch(err => log('Camera/Mic permission or availability problem: ' + err.message));
+  }
+  setupMedia();
+
+  // ----- Accelerometer detection (mobile) -----
+  window.addEventListener('devicemotion', e => {
+    if(state !== 'work') return;
+    const acc = e.acceleration || e.accelerationIncludingGravity || {x:0,y:0,z:0};
+    const move = Math.abs(acc.x || 0) + Math.abs(acc.y || 0) + Math.abs(acc.z || 0);
+    if(move > moveThreshold && mode !== 'pseudo') handleDistraction('Too much movement detected');
+  });
+
+  // ----- Pseudo mode: simulate distractions -----
+  function startPseudoSim(){
+    stopPseudoSim();
+    // simulate an interruption every 20-40 seconds randomly when in work
+    pseudoIntervalId = setInterval(() => {
+      if(state === 'work'){
+        handleDistraction('Pseudo-mode simulated distraction');
+      }
+    }, 20000 + Math.floor(Math.random()*20000));
+    log('Pseudo-mode: simulation started');
+  }
+  function stopPseudoSim(){ if(pseudoIntervalId){ clearInterval(pseudoIntervalId); pseudoIntervalId = null; log('Pseudo-mode: simulation stopped'); } }
+
+  // ensure pseudo sim stops/starts correctly when mode changes
+  modeSelect.addEventListener('change', () => {
+    if(modeSelect.value !== 'pseudo') stopPseudoSim();
+    else if(state === 'work') startPseudoSim();
+  });
+
+  // Update displayed time & info continuously
+  setInterval(() => {
+    // sync UI duration displays when custom values change
+    if(mode === 'custom'){
+      workDurationSec = (parseInt(customWorkEl.value) || 25) * 60;
+      breakDurationSec = (parseInt(customBreakEl.value) || 5) * 60;
+    }
+    workInfo.textContent = Math.round(workDurationSec/60);
+    breakInfo.textContent = Math.round(breakDurationSec/60);
+    modeInfo.textContent = mode === 'pomodoro' ? 'Pomodoro' : (mode === 'custom' ? 'Custom' : 'Pseudo Study');
+  }, 1000);
+
+  // Initial UI
+  showTime();
+  log('Ready — choose mode & press Start');
+
+  // expose some functions for debugging in console if needed
+  window._ss = { startSession, pauseSession, resumeSession, skipPeriod, handleDistraction };
+  </script>
+</body>
+</html>
